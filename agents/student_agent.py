@@ -21,7 +21,7 @@ class StudentAgent(Agent):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
     # TODO: adjust max depth or implement iterative deepening
-    self.max_depth = 3 
+    self.max_depth = 2
 
   def step(self, chess_board, player, opponent):
     """
@@ -142,6 +142,8 @@ class StudentAgent(Agent):
     Amplify scores to favor winning moves.
     
     TODO: improve evaluation function with heuristics.
+    
+    Draft 1: Value having more legal moves
     """
     
     num_player_discs = np.sum(board == player)
@@ -152,4 +154,10 @@ class StudentAgent(Agent):
     if num_opponent_discs == 0:
       return 1000
     
-    return num_player_discs - num_opponent_discs
+    num_moves_player = len(get_valid_moves(board, player))
+    num_moves_opponent = len(get_valid_moves(board, opponent))
+    move_diff = num_moves_player - num_moves_opponent
+    
+    discs_diff = num_player_discs - num_opponent_discs
+    
+    return discs_diff + move_diff

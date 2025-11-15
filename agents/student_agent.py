@@ -5,7 +5,7 @@ import sys
 import numpy as np
 from copy import deepcopy
 import time
-from helpers import random_move, execute_move, check_endgame, get_valid_moves
+from helpers import execute_move, check_endgame, get_valid_moves, count_disc_count_change
 
 @register_agent("student_agent")
 class StudentAgent(Agent):
@@ -45,7 +45,7 @@ class StudentAgent(Agent):
     # so far when it nears 2 seconds.
     start_time = time.time()
     
-    valid_moves = get_valid_moves(chess_board, player)
+    valid_moves = self.get_moves(chess_board, player)
     
     if not valid_moves:
       return None
@@ -72,6 +72,21 @@ class StudentAgent(Agent):
 
     # TODO: return the best move found after searching
     return best_move
+  
+  def get_moves(self, board, player):
+    """
+    Returns an ordered list of moves from most promising to least.
+    """
+    
+    moves = get_valid_moves(board, player)
+    result = []
+    
+    for move in moves:
+      num_discs_gained = count_disc_count_change(board, move, player)
+      result.append((num_discs_gained, move))
+    
+    result.sort(reverse=True, key = lambda x: x[0])
+    return [move for _, move in result]
   
   def minimax(self, board, is_maximizing, alpha, beta, player, opponent, depth):
     """

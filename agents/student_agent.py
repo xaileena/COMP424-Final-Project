@@ -20,8 +20,6 @@ class StudentAgent(Agent):
   def __init__(self):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
-    # TODO: adjust max depth or implement iterative deepening
-    self.max_depth = 2
 
   def step(self, chess_board, player, opponent):
     """
@@ -50,27 +48,49 @@ class StudentAgent(Agent):
     if not valid_moves:
       return None
     
-    best_move = None
-    best_score = float('-inf')
-    alpha = float('-inf')
-    beta = float('inf')
+    best_move = valid_moves[0]
     
-    for move in valid_moves:
-      board_copy = deepcopy(chess_board)
-      execute_move(board_copy, move, player)
-      score = self.minimax(board_copy, False, alpha, beta, player, opponent, 1)
+    depth = 1
+    while True:
+      # break right before 2.0 seconds
+      if time.time() - start_time > 1.98:
+        break
       
-      if score > best_score:
-        best_score = score
-        best_move = move
+      try:
       
-      alpha = max(alpha, best_score)
+        cur_best_move = None
+        cur_best_score = float('-inf')
+        alpha = float('-inf')
+        beta = float('inf')
+        
+        for move in valid_moves:
+          
+          if time.time() - start_time > 1.98:
+            break
+          
+          board_copy = deepcopy(chess_board)
+          execute_move(board_copy, move, player)
+          score = self.minimax(board_copy, False, alpha, beta, player, opponent, 1, depth, start_time)
+          
+          if score > cur_best_score:
+            cur_best_score = score
+            cur_best_move = move
+          
+          alpha = max(alpha, cur_best_score)
+        
+        if cur_best_move is not None:
+          best_move = cur_best_move
+        
+        depth += 1
+      
+      except TimeoutError:
+        break
       
     time_taken = time.time() - start_time
+    print("Depth reached: {}, Time taken: {:.4f} seconds".format(depth, time_taken))
     if time_taken > 2.0:
       print("WARNING: Move took too long. Time taken: {:.4f} seconds".format(time_taken))
 
-    # TODO: return the best move found after searching
     return best_move
   
   def get_moves(self, board, player):
@@ -88,14 +108,17 @@ class StudentAgent(Agent):
     result.sort(reverse=True, key = lambda x: x[0])
     return [move for _, move in result]
   
-  def minimax(self, board, is_maximizing, alpha, beta, player, opponent, depth):
+  def minimax(self, board, is_maximizing, alpha, beta, player, opponent, depth, max_depth, start_time):
     """
     Alpha Beta Pruning algorithm implementation.
     """
     
-    is_endgame, p1_score, p2_score = check_endgame(board)
+    if time.time() - start_time > 1.98:
+      raise TimeoutError("Took too long to search")
     
-    if is_endgame or depth == self.max_depth:
+    is_endgame, _, _ = check_endgame(board)
+    
+    if is_endgame or depth >= max_depth:
       return self.get_scores(board, player, opponent)
     
     cur_player = player if is_maximizing else opponent
@@ -104,7 +127,7 @@ class StudentAgent(Agent):
     
     if not valid_moves:
       # early termination, continue to next depth
-      return self.minimax(board, not is_maximizing, alpha, beta, player, opponent, depth + 1)
+      return self.minimax(board, not is_maximizing, alpha, beta, player, opponent, depth + 1, max_depth, start_time)
     
     if is_maximizing:
       max_score = float('-inf')
@@ -112,7 +135,7 @@ class StudentAgent(Agent):
       for move in valid_moves:
         board_copy = deepcopy(board)
         execute_move(board_copy, move, cur_player)
-        score = self.minimax(board_copy, False, alpha, beta, player, opponent, depth+1)
+        score = self.minimax(board_copy, False, alpha, beta, player, opponent, depth+1, max_depth, start_time)
         max_score = max(max_score, score)
         alpha = max(alpha, max_score)
         
@@ -127,7 +150,7 @@ class StudentAgent(Agent):
       for move in valid_moves:
         board_copy = deepcopy(board)
         execute_move(board_copy, move, cur_player)
-        score = self.minimax(board_copy, True, alpha, beta, player, opponent, depth+1)
+        score = self.minimax(board_copy, True, alpha, beta, player, opponent, depth+1, max_depth, start_time)
         min_score = min(min_score, score)
         beta = min(beta, min_score)
         
@@ -142,6 +165,8 @@ class StudentAgent(Agent):
     Amplify scores to favor winning moves.
     
     TODO: improve evaluation function with heuristics.
+    - Consider tricking the opponent into making bad moves?
+    - Corner the opponent by decreasing their legal moves?
     
     Draft 1: Value having more legal moves
     """
@@ -160,4 +185,30 @@ class StudentAgent(Agent):
     
     discs_diff = num_player_discs - num_opponent_discs
     
-    return discs_diff + move_diff
+    center_points = self.central_control(board, player, opponent)
+    
+    return 5 * discs_diff + 2 * center_points + move_diff
+  
+  
+  def central_control(self, board, player, opponent):
+    """
+    With just the number of discs and moves, the agent plays too passively.
+    The agent avoids conflict and duplicates in safe spaces (near edges and corners).
+    
+    Make the agent play more aggressive by taking advantage of the space in the center
+    of the board.
+    """
+    
+    board_size = board.shape[0]
+    center = board_size // 2
+    score = 0
+    
+    for row in range(board_size):
+      for col in range(board_size):
+        distance = abs(row - center) +  abs(col - center)
+        if board[row, col] == player:
+          score += (board_size - distance)
+        elif board[row, col] == opponent:
+          score -= (board_size - distance)
+    
+    return score

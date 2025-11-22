@@ -3,7 +3,6 @@ from agents.agent import Agent
 from store import register_agent
 import sys
 import numpy as np
-from copy import deepcopy
 import time
 from helpers import execute_move, check_endgame, get_valid_moves, count_disc_count_change
 
@@ -20,7 +19,8 @@ class StudentAgent(Agent):
   def __init__(self):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
-
+    self.max_depth = 4
+    
   def step(self, chess_board, player, opponent):
     """
     Implement the step function of your agent here.
@@ -42,100 +42,118 @@ class StudentAgent(Agent):
     # time_taken during your search and breaking with the best answer
     # so far when it nears 2 seconds.
     start_time = time.time()
-    
+    time_limit = 1.90
+
     valid_moves = self.get_moves(chess_board, player)
-    
+
     if not valid_moves:
       return None
+
+    best_move = None
+    best_score = float('-inf')
+    alpha = float('-inf')
+    beta = float('inf')
     
-    best_move = valid_moves[0]
-    
-    depth = 1
-    while True:
-      # break right before 2.0 seconds
-      if time.time() - start_time > 1.98:
+    self.best_move_so_far = None
+    self.best_score_so_far = float('-inf')
+
+    for move in valid_moves:
+      
+      if time.time() - start_time > time_limit:
         break
       
-      try:
+      board_copy = np.copy(chess_board)
+      execute_move(board_copy, move, player)
       
-        cur_best_move = None
-        cur_best_score = float('-inf')
-        alpha = float('-inf')
-        beta = float('inf')
-        
-        for move in valid_moves:
-          
-          if time.time() - start_time > 1.98:
-            break
-          
-          board_copy = deepcopy(chess_board)
-          execute_move(board_copy, move, player)
-          score = self.minimax(board_copy, False, alpha, beta, player, opponent, 1, depth, start_time)
-          
-          if score > cur_best_score:
-            cur_best_score = score
-            cur_best_move = move
-          
-          alpha = max(alpha, cur_best_score)
-        
-        if cur_best_move is not None:
-          best_move = cur_best_move
-        
-        depth += 1
+      score = self.minimax(board_copy, False, alpha, beta, player, opponent, 1, start_time, time_limit, move)
       
-      except TimeoutError:
-        break
+      if score > best_score:
+        best_score = score
+        best_move = move
+      
+      if score > self.best_score_so_far:
+        self.best_score_so_far = score
+        self.best_move_so_far = move
+      
+      alpha = max(alpha, best_score)
       
     time_taken = time.time() - start_time
-    print("Depth reached: {}, Time taken: {:.4f} seconds".format(depth, time_taken))
+    
     if time_taken > 2.0:
       print("WARNING: Move took too long. Time taken: {:.4f} seconds".format(time_taken))
 
+    if self.best_move_so_far is not None:
+      return self.best_move_so_far
+    
     return best_move
-  
+
   def get_moves(self, board, player):
     """
     Returns an ordered list of moves from most promising to least.
     """
     
     moves = get_valid_moves(board, player)
-    result = []
+    result = {}
     
     for move in moves:
       num_discs_gained = count_disc_count_change(board, move, player)
-      result.append((num_discs_gained, move))
+      result[move] = num_discs_gained
     
-    result.sort(reverse=True, key = lambda x: x[0])
-    return [move for _, move in result]
+    result = sorted(result.items(), key=lambda x: x[1], reverse=True)[:5]
+    
+    moves = []
+    for move, _ in result:
+      moves.append(move)
+    
+    return moves
   
-  def minimax(self, board, is_maximizing, alpha, beta, player, opponent, depth, max_depth, start_time):
+  def minimax(self, board, is_maximizing, alpha, beta, player, opponent, depth, start_time, time_limit, root_move=None):
     """
     Alpha Beta Pruning algorithm implementation.
     """
-    
-    if time.time() - start_time > 1.98:
-      raise TimeoutError("Took too long to search")
-    
-    is_endgame, _, _ = check_endgame(board)
-    
-    if is_endgame or depth >= max_depth:
+
+    if time.time() - start_time > time_limit:
+      if root_move is not None:
+        score = self.get_scores(board, player, opponent)
+        
+        if score > self.best_score_so_far:
+          self.best_score_so_far = score
+          self.best_move_so_far = root_move
+          
       return self.get_scores(board, player, opponent)
-    
+
+    is_endgame, _, _ = check_endgame(board)
+
+    if is_endgame or depth == self.max_depth:
+      return self.get_scores(board, player, opponent)
+
     cur_player = player if is_maximizing else opponent
-    
-    valid_moves = get_valid_moves(board, cur_player)
-    
+
+    valid_moves = self.get_moves(board, cur_player)
+
     if not valid_moves:
+      opponent_moves = self.get_moves(board, opponent if is_maximizing else player)
+      
+      if not opponent_moves:
+        # both players have no moves, endgame
+        return self.get_scores(board, player, opponent)
+      
       # early termination, continue to next depth
-      return self.minimax(board, not is_maximizing, alpha, beta, player, opponent, depth + 1, max_depth, start_time)
-    
+      return self.minimax(board, not is_maximizing, alpha, beta, player, opponent, depth + 1, start_time, time_limit, root_move)
+
     if is_maximizing:
       max_score = float('-inf')
       
       for move in valid_moves:
-        board_copy = deepcopy(board)
+        
+        if time.time() - start_time > time_limit:
+          break
+        
+        board_copy = np.copy(board)
         execute_move(board_copy, move, cur_player)
-        score = self.minimax(board_copy, False, alpha, beta, player, opponent, depth+1, max_depth, start_time)
+        
+        score = self.minimax(board_copy, False, alpha, beta, player, opponent, depth+1, start_time, time_limit, root_move)
+        
         max_score = max(max_score, score)
         alpha = max(alpha, max_score)
         
@@ -148,9 +166,15 @@ class StudentAgent(Agent):
       min_score = float('inf')
       
       for move in valid_moves:
-        board_copy = deepcopy(board)
+        
+        if time.time() - start_time > time_limit:
+          break
+        
+        board_copy = np.copy(board)
         execute_move(board_copy, move, cur_player)
-        score = self.minimax(board_copy, True, alpha, beta, player, opponent, depth+1, max_depth, start_time)
+        
+        score = self.minimax(board_copy, True, alpha, beta, player, opponent, depth+1, start_time, time_limit, root_move)
+        
         min_score = min(min_score, score)
         beta = min(beta, min_score)
         
@@ -160,34 +184,40 @@ class StudentAgent(Agent):
       return min_score
     
   def get_scores(self, board, player, opponent):
-    """
-    Returns the score difference between the player and opponent.
-    Amplify scores to favor winning moves.
-    
-    TODO: improve evaluation function with heuristics.
-    - Consider tricking the opponent into making bad moves?
-    - Corner the opponent by decreasing their legal moves?
-    
-    Draft 1: Value having more legal moves
-    """
-    
-    num_player_discs = np.sum(board == player)
-    num_opponent_discs = np.sum(board == opponent)
-    
-    if num_player_discs == 0:
-      return -1000
-    if num_opponent_discs == 0:
-      return 1000
-    
-    num_moves_player = len(get_valid_moves(board, player))
-    num_moves_opponent = len(get_valid_moves(board, opponent))
-    move_diff = num_moves_player - num_moves_opponent
-    
-    discs_diff = num_player_discs - num_opponent_discs
-    
-    center_points = self.central_control(board, player, opponent)
-    
-    return 5 * discs_diff + 2 * center_points + move_diff
+      """
+      Returns the score difference between the player and opponent.
+      Amplify scores to favor winning moves.
+      """
+      
+      num_player_discs = np.sum(board == player)
+      num_opponent_discs = np.sum(board == opponent)
+      
+      if num_player_discs == 0:
+        return -1000
+      if num_opponent_discs == 0:
+        return 1000
+      
+      num_moves_opponent = len(get_valid_moves(board, opponent))
+      num_moves_player = len(get_valid_moves(board, player))
+      
+      if num_moves_opponent == 0 and num_moves_player > 0:
+        return 500
+      if num_moves_player == 0 and num_moves_opponent > 0:
+        return -500
+
+      move_diff = len(get_valid_moves(board, player)) - len(get_valid_moves(board, opponent))
+      
+      discs_diff = num_player_discs - num_opponent_discs
+      
+      center_points = self.central_control(board, player, opponent)
+      
+      game_progress = self.get_game_progress(board)
+      
+      if game_progress <= 0.5:
+        return 2 * discs_diff + 6 * center_points + 4 * move_diff
+      
+      else:
+        return 12 * discs_diff + 4 * move_diff
   
   
   def central_control(self, board, player, opponent):
@@ -205,10 +235,24 @@ class StudentAgent(Agent):
     
     for row in range(board_size):
       for col in range(board_size):
+        
         distance = abs(row - center) +  abs(col - center)
+        
         if board[row, col] == player:
           score += (board_size - distance)
+          
         elif board[row, col] == opponent:
           score -= (board_size - distance)
     
     return score
+  
+  def get_game_progress(self, board):
+    """
+    Get the game progress with 0 being the start
+    and 1 being the end.
+    """
+    
+    total_tiles = board.shape[0] * board.shape[1] - np.sum(board == 3)
+    filled_tiles = np.sum((board == 1) + (board == 2))
+    
+    return filled_tiles / total_tiles if total_tiles > 0 else 0

@@ -11,9 +11,6 @@ class StudentAgent(Agent):
   """
   A class for your implementation. Feel free to use this class to
   add any helper functionalities needed for your agent.
-  
-  To run:
-  ./venv/bin/python simulator.py --player_1 student_agent --player_2 random_agent --display
   """
 
   def __init__(self):
@@ -90,6 +87,7 @@ class StudentAgent(Agent):
   def get_moves(self, board, player):
     """
     Returns an ordered list of moves from most promising to least.
+    Most promising being the moves that can get the most discs.
     """
     
     moves = get_valid_moves(board, player)
@@ -141,7 +139,7 @@ class StudentAgent(Agent):
       # early termination, continue to next depth
       return self.minimax(board, not is_maximizing, alpha, beta, player, opponent, depth + 1, start_time, time_limit, root_move)
 
-    if is_maximizing:
+    if is_maximizing: # maximizing player
       max_score = float('-inf')
       
       for move in valid_moves:
@@ -162,7 +160,7 @@ class StudentAgent(Agent):
         
       return max_score
     
-    else:
+    else: # minimizing player
       min_score = float('inf')
       
       for move in valid_moves:
@@ -185,8 +183,17 @@ class StudentAgent(Agent):
     
   def get_scores(self, board, player, opponent):
       """
-      Returns the score difference between the player and opponent.
-      Amplify scores to favor winning moves.
+      Returns a score for the given board state from the perspective of the player.
+      A higher score indicates a more favorable position for the player.
+      
+      Encapsulates multiple heuristics to evaluate the board state:
+      - Disc Count Difference: The difference in the number of discs between the player and opponent.
+      - Mobility: The difference in the number of valid moves available to the player and opponent.
+      - Central Control: A measure of how many discs the player has in the central area of the board.
+      - Game Progression: Adjusts the weight of heuristics based on how far along the game is.
+      
+      Early game prioritizes central control and mobility because each player starts in the corners,
+      so we want to play more aggressively to gain control of the center. Late game, this matters less.
       """
       
       num_player_discs = np.sum(board == player)
@@ -201,8 +208,10 @@ class StudentAgent(Agent):
       num_moves_player = len(get_valid_moves(board, player))
       
       if num_moves_opponent == 0 and num_moves_player > 0:
+        # reward for opponent having no moves
         return 500
       if num_moves_player == 0 and num_moves_opponent > 0:
+        # penalty for player having no moves
         return -500
 
       move_diff = len(get_valid_moves(board, player)) - len(get_valid_moves(board, opponent))
@@ -226,7 +235,8 @@ class StudentAgent(Agent):
     The agent avoids conflict and duplicates in safe spaces (near edges and corners).
     
     Make the agent play more aggressive by taking advantage of the space in the center
-    of the board.
+    of the board. Reward having discs closer to the center and penalize opponent discs
+    closer to the center.
     """
     
     board_size = board.shape[0]
@@ -236,6 +246,7 @@ class StudentAgent(Agent):
     for row in range(board_size):
       for col in range(board_size):
         
+        # manhattan distance from center
         distance = abs(row - center) +  abs(col - center)
         
         if board[row, col] == player:
@@ -252,6 +263,7 @@ class StudentAgent(Agent):
     and 1 being the end.
     """
     
+    # exclude obstacles
     total_tiles = board.shape[0] * board.shape[1] - np.sum(board == 3)
     filled_tiles = np.sum((board == 1) + (board == 2))
     

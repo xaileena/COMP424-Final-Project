@@ -1,7 +1,11 @@
-- name: "Your full name as appears on your transcript"
-  mcgill_id: "Your mcgill id"
-  email: "email@mail.mcgill.ca"
+- name: "Aileena Xie"
+  mcgill_id: "261050876"
+  email: "aileena.xie@mail.mcgill.ca"
 
-- name: "Your full name as appears on your transcript"
-  mcgill_id: "Your mcgill id"
-  email: "email@mail.mcgill.ca"
+- name: "Alexa Li Kam Wa"
+  mcgill_id: "261176041"
+  email: "alexa.likamwa@mail.mcgill.ca"
+
+- name: "Esosa Obano"
+  mcgill_id: "261014806"
+  email: "Esosa.obano@mail.mcgil.ca"
